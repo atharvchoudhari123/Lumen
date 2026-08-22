@@ -1,4 +1,6 @@
-export function buildResponseHeaders(headers) {
+export function buildResponseHeaders(
+  headers
+) {
   const output = {};
 
   for (
@@ -8,11 +10,39 @@ export function buildResponseHeaders(headers) {
     const lower =
       key.toLowerCase();
 
+    /*
+     * Hop-by-hop headers should not be
+     * forwarded by the proxy.
+     */
     if (
-      lower === "content-length" ||
-      lower === "content-encoding" ||
+      lower === "connection" ||
+      lower === "keep-alive" ||
+      lower === "proxy-authenticate" ||
+      lower === "proxy-authorization" ||
+      lower === "te" ||
+      lower === "trailer" ||
       lower === "transfer-encoding" ||
-      lower === "connection"
+      lower === "upgrade"
+    ) {
+      continue;
+    }
+
+    /*
+     * We may change the body during rewriting,
+     * so the original length is no longer valid.
+     */
+    if (
+      lower === "content-length"
+    ) {
+      continue;
+    }
+
+    /*
+     * The browser should receive the decoded
+     * body from fetch().
+     */
+    if (
+      lower === "content-encoding"
     ) {
       continue;
     }
