@@ -1,5 +1,7 @@
 import { buildResponseHeaders } from "./headers.js";
 import { getContentType } from "../utils/content-type.js";
+import { rewriteHtml } from "../rewrite/html.js";
+import { rewriteCss } from "../rewrite/css.js";
 
 export async function proxyRequest(
   clientReq,
@@ -12,13 +14,123 @@ export async function proxyRequest(
     redirect: "manual"
   });
 
-  const contentType = getContentType(
-    response.headers.get("content-type")
-  );
+  /*
+   * Handle redirects.
+
+   * The browser needs to continue through
+   * the proxy instead of leaving it.
+   */
+  if (
+    response.status >= 300 &&
+    response.status < 400
+  ) {
+    const location =
+      response.headers.get("location");
+
+    if (location) {
+      const absoluteLocation =
+        new URL(
+          location,
+          targetURL
+        ).href;
+
+      const proxyLocation =
+        "/proxy?url=" +
+        encodeURIComponent(
+          absoluteLocation
+        );
+
+      clientRes.writeHead(
+        response.status,
+        {
+          location: proxyLocation
+        }
+      );
+
+      clientRes.end();
+      return;
+    }
+  }
+
+  const contentType =
+    getContentType(
+      response.headers.get(
+        "content-type"
+      )
+    );
 
   const headers =
-    buildResponseHeaders(response.headers);
+    buildResponseHeaders(
+      response.headers
+    );
 
+  /*
+   * HTML
+   *
+   * Must be processed because it contains
+   * URLs for CSS, JS, images, fonts, etc.
+   */
+  if (contentType === "html") {
+    const text =
+      await response.text();
+
+    const rewritten =
+      rewriteHtml(
+        text,
+        targetURL
+      );
+
+    headers["content-type"] =
+      "text/html; charset=utf-8";
+
+    delete headers["content-length"];
+
+    clientRes.writeHead(
+      response.status,
+      headers
+    );
+
+    clientRes.end(rewritten);
+    return;
+  }
+
+  /*
+   * CSS
+   *
+   * CSS can contain additional resources
+   * such as images and fonts.
+   */
+  if (contentType === "css") {
+    const text =
+      await response.text();
+
+    const rewritten =
+      rewriteCss(
+        text,
+        targetURL
+      );
+
+    headers["content-type"] =
+      "text/css; charset=utf-8";
+
+    delete headers["content-length"];
+
+    clientRes.writeHead(
+      response.status,
+      headers
+    );
+
+    clientRes.end(rewritten);
+    return;
+  }
+
+  /*
+   * EVERYTHING ELSE
+   *
+   * Images, fonts, videos, audio, JavaScript,
+   * WASM, archives, etc. stay on the streaming
+   * path.
+   */
   clientRes.writeHead(
     response.status,
     headers
@@ -29,53 +141,43 @@ export async function proxyRequest(
     return;
   }
 
-  /*
-   * Stream binary resources directly.
-   * This avoids buffering large files.
-   */
+  const reader =
+    response.body.getReader();
 
-  if (contentType === "binary") {
-    const reader =
-      response.body.getReader();
+  while (true) {
+    const {
+      done,
+      value
+    } = await reader.read();
 
-    while (true) {
-      const { done, value } =
-        await reader.read();
+    if (done) {
+      break;
+    }
 
-      if (done) {
-        break;
-      }
+    const buffer =
+      Buffer.from(value);
 
-      if (
-        !clientRes.write(
-          Buffer.from(value)
-        )
-      ) {
-        await new Promise(resolve => {
+    if (
+      !clientRes.write(buffer)
+    ) {
+      await new Promise(
+        resolve => {
           clientRes.once(
             "drain",
             resolve
           );
-        });
-      }
+        }
+      );
     }
-
-    clientRes.end();
-    return;
   }
 
-  /*
-   * Text resources use the buffered
-   * compatibility path for now.
-   */
-
-  const text =
-    await response.text();
-
-  clientRes.end(text);
+  clientRes.end();
 }
 
-function buildRequestHeaders(headers) {
+
+function buildRequestHeaders(
+  headers
+) {
   const output = {};
 
   for (
@@ -85,6 +187,10 @@ function buildRequestHeaders(headers) {
     const lower =
       key.toLowerCase();
 
+    /*
+     * These are controlled by the
+     * proxy's own HTTP connection.
+     */
     if (
       lower === "host" ||
       lower === "connection" ||
