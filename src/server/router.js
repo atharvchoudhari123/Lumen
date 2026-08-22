@@ -9,6 +9,7 @@ export async function handleRequest(req, res) {
     `http://${req.headers.host || "localhost"}`
   );
 
+  // Lumen landing page
   if (url.pathname === "/") {
     const html = await readFile(
       new URL("../../index.html", import.meta.url),
@@ -16,13 +17,15 @@ export async function handleRequest(req, res) {
     );
 
     res.writeHead(200, {
-      "content-type": "text/html; charset=utf-8"
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-cache"
     });
 
     res.end(html);
     return;
   }
 
+  // Everything under /proxy is a proxied resource
   if (url.pathname !== "/proxy") {
     res.writeHead(404, {
       "content-type": "text/plain; charset=utf-8"
