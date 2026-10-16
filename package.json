@@ -12,7 +12,8 @@
     "benchmark:throughput": "node benchmark/throughput.js"
   },
   "dependencies": {
-    "undici": "^6.21.3"
+    "undici": "^6.21.3",
+    "ws": "^8.18.3"
   },
   "engines": {
     "node": ">=20"
