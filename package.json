@@ -1,6 +1,6 @@
 {
   "name": "lumen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Lumen high-performance proxy engine",
@@ -10,6 +10,9 @@
     "test": "node --test",
     "benchmark": "node benchmark/latency.js",
     "benchmark:throughput": "node benchmark/throughput.js"
+  },
+  "dependencies": {
+    "undici": "^6.21.3"
   },
   "engines": {
     "node": ">=20"
