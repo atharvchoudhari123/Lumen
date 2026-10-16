@@ -2,118 +2,74 @@
 
 > A modern, modular web proxy and rewriting engine built from scratch.
 
-Lumen is an experimental open-source proxy project designed to explore how modern web applications can be fetched, processed, and served through a custom proxy layer.
+Lumen is an experimental Node.js project for legitimate development, testing, and integration with sites and services you own or are authorized to test.
 
-## ✨ Features
+## Engine features
 
-* 🚀 Fast Node.js-based server
-* 🌐 HTTP/HTTPS resource proxying
-* 🔗 URL rewriting
-* 📄 HTML resource rewriting
-* 🎨 CSS resource handling
-* 📦 Static asset proxying
-* 🧩 Modular architecture
-* 🔒 Configurable security controls
-* 🛠️ Designed to be extended over time
+- Streaming responses for media and other large resources
+- Bounded request concurrency and a bounded queue
+- Shared upstream keep-alive connection pool
+- Upstream timeout and client-disconnect cancellation
+- HTML and CSS rewriting with a configurable rewrite-size budget
+- Range-request pass-through for partial content
+- Health endpoint at `/health`
+- Local-only request metrics at `/metrics`
+- WebSocket signaling relay for WebRTC applications you control
 
-## 🏗️ Architecture
+## Start
 
-```text
-Browser
-   │
-   ▼
-┌───────────────┐
-│     Lumen     │
-│               │
-│ URL Parser    │
-│      ↓        │
-│ HTTP Client   │
-│      ↓        │
-│ Rewriter      │
-│      ↓        │
-│ Response      │
-└───────┬───────┘
-        │
-        ▼
-   Target Website
-```
-
-Lumen receives a request, retrieves the requested resource, processes it when necessary, rewrites relevant URLs, and sends the result back to the browser.
-
-## 📁 Project Structure
-
-```text
-lumen/
-├── src/
-│   ├── server/
-│   ├── proxy/
-│   ├── rewrite/
-│   └── utils/
-├── public/
-├── package.json
-├── README.md
-└── LICENSE
-```
-
-> The structure may change as development continues.
-
-## 🚀 Getting Started
-
-### Requirements
-
-* Node.js 20+
-* npm
-
-### Installation
+Requires Node.js 20+.
 
 ```bash
-git clone https://github.com/atharvchoudhari123/Lumen.git
-cd Lumen
 npm install
-```
-
-### Development
-
-```bash
 npm start
 ```
 
-Then open the local address shown by the server.
+Open `http://127.0.0.1:3000`.
 
-## 🧪 Development Status
+## Engine configuration
 
-Lumen is currently under active development.
+All settings are optional:
 
-The project is being built incrementally, starting with basic proxying and URL rewriting before expanding into more advanced web-application compatibility.
+| Variable | Default | Purpose |
+| --- | ---: | --- |
+| `PORT` | `3000` | HTTP listening port |
+| `HOST` | `127.0.0.1` | Listening interface |
+| `LUMEN_MAX_ACTIVE_REQUESTS` | `256` | Maximum active HTTP requests |
+| `LUMEN_MAX_QUEUED_REQUESTS` | `512` | Maximum requests waiting for a slot |
+| `LUMEN_REQUEST_TIMEOUT_MS` | `120000` | HTTP server request timeout |
+| `LUMEN_UPSTREAM_TIMEOUT_MS` | `30000` | Upstream fetch timeout |
+| `LUMEN_MAX_REWRITE_BYTES` | `2000000` | Maximum HTML/CSS size eligible for rewriting |
+| `LUMEN_UPSTREAM_CONNECTIONS` | `64` | Upstream keep-alive connections |
 
-### Roadmap
+If the active and queued limits are reached, Lumen returns HTTP 503 rather than growing the queue without bound.
 
-* [ ] Basic HTTP proxy
-* [ ] HTTPS support
-* [ ] HTML rewriting
-* [ ] CSS rewriting
-* [ ] JavaScript URL rewriting
-* [ ] Cookie handling
-* [ ] Redirect handling
-* [ ] Streaming responses
-* [ ] WebSocket support
-* [ ] Caching
-* [ ] Improved browser compatibility
-* [ ] Security and abuse protections
+## HTML/CSS rendering notes
 
-## ⚠️ Disclaimer
+The rewriting layer handles common URL-bearing HTML attributes and CSS `url(...)` values. It deliberately does not inject an upstream `<base>` tag, because doing so can make relative requests skip Lumen. Complex sites may still rely on JavaScript-generated URLs, service workers, cross-origin policies, or browser APIs that a simple URL rewriter cannot emulate. For debugging, compare the upstream response with the rewritten response and use browser developer tools to identify failed resource requests.
 
-Lumen is intended for **legitimate development, testing, research, and educational purposes**.
+Large HTML/CSS responses above the rewrite budget are passed through unchanged to avoid buffering arbitrarily large documents. Non-HTML responses use a streaming path with backpressure.
 
-Do not use Lumen to bypass access controls, violate website terms, or access content you are not authorized to access.
+## WebRTC support
 
-## 🤝 Contributing
+Lumen provides a small WebSocket signaling relay at:
 
-Contributions, bug reports, and ideas are welcome.
+```
+ws://127.0.0.1:3000/signal?room=<room-id>
+```
 
-1. Fork the repository
-2. Create a branch
-3. Make your changes
-4. Test your changes
-5. Open a pull request
+Room IDs must be 8–80 characters from letters, digits, underscores, or hyphens. Clients can relay JSON messages with `type` values `offer`, `answer`, and `ice-candidate`. The relay assigns a peer ID and adds a `from` field to relayed messages.
 
+**This is signaling support, not a universal WebRTC media proxy.** The application still needs browser-side `RTCPeerConnection` logic and suitable STUN/TURN servers. WebRTC media uses ICE-selected network paths and is not carried through this HTTP proxy automatically. For production, add authentication, room authorization, rate limits, HTTPS/WSS, and a properly managed TURN service.
+
+## Security
+
+Keep Lumen bound to localhost unless you have added authentication, origin controls, an upstream hostname allowlist, and network-level protections. Do not expose an unrestricted proxy publicly. Lumen is not intended to bypass access controls or site security policies.
+
+## Development
+
+```bash
+npm test
+npm run benchmark
+npm run benchmark:throughput
+```
