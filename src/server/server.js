@@ -1,6 +1,6 @@
 import http from "node:http";
 import { handleRequest } from "./router.js";
-import { createRequestManager } from "../proxy/request-manager.js";
+import { createRequestManager, setRequestMetricsProvider } from "../proxy/request-manager.js";
 import { attachWebRTCSignaling } from "./webrtc-signaling.js";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -10,6 +10,7 @@ const requestManager = createRequestManager({
   maxActive: MAX_ACTIVE,
   maxQueued: Number(process.env.LUMEN_MAX_QUEUED_REQUESTS || 512)
 });
+setRequestMetricsProvider(() => requestManager.metrics());
 
 const server = http.createServer(async (req, res) => {
   const release = await requestManager.acquire();
@@ -49,7 +50,7 @@ const signaling = attachWebRTCSignaling(server);
 server.listen(PORT, HOST, () => {
   console.log(`Lumen listening on http://${HOST}:${PORT}`);
   console.log(`Engine limits: ${MAX_ACTIVE} active requests, ${process.env.LUMEN_MAX_QUEUED_REQUESTS || 512} queued requests`);
-  console.log("WebRTC signaling endpoint: ws://%s:%s/signal?room=<8-80-character-room-id>", HOST, PORT);
+  console.log(`WebRTC signaling endpoint: ws://${HOST}:${PORT}/signal?room=<8-80-character-room-id>`);
 });
 
 function shutdown() {
